@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-# 2. Define the network used in both target net and the net for training
+# Define the network used in both target net and the net for training
 class NetDQN(nn.Module):
     def __init__(self, N_ACTIONS):
         super(NetDQN, self).__init__()
@@ -69,9 +69,6 @@ class DQN(object):
 
     def choose_action(self, x):
         # This function is used to make decision based upon epsilon greedy
-        # x = x.astype(float)
-        # x = np.array(x)
-        # x = torch.unsqueeze(torch.FloatTensor(x), 0)  # add 1 dimension to input state x
 
         x = x[np.newaxis, :, :, :]
         x = torch.FloatTensor(x)
@@ -92,9 +89,8 @@ class DQN(object):
         return action
 
     def store_transition(self, s, a, r, s_):
-        # # This function acts as experience replay buffer
-        # transition = np.hstack((s, [a, r], s_))  # horizontally stack these vectors
-        # # if the capacity is full, then use index to replace the old memory with new one
+        # This function acts as experience replay buffer
+        # if the capacity is full, then use index to replace the old memory with new one
         index = self.memory_counter % self.MEMORY_CAPACITY  # if memory_counter > MEMORY_CAPACITY, it will update
         l = list()
         l.append(s)
@@ -131,24 +127,17 @@ class DQN(object):
             b_s_.append(self.memory[i][3])
         b_s = np.array(b_s)
         b_s = torch.FloatTensor(b_s).to(self.DEVICE)
-        # print(b_s.shape)
         # convert long int type to tensor
         b_a = torch.LongTensor(b_a).to(self.DEVICE)
-        # print(b_a.shape)
         b_r = torch.FloatTensor(b_r).to(self.DEVICE)
-        # print(b_r.shape)
         b_s_ = np.array(b_s_)
         b_s_ = torch.FloatTensor(b_s_).to(self.DEVICE)
-        # print(b_s_.shape)
 
         # calculate the Q value of state-action pair
-        # q_eval = self.eval_net(b_s)
         q_eval = self.eval_net(b_s).gather(1, b_a)  # (batch_size, 1)
-        # print(q_eval.to)
         # calculate the q value of next state
         q_next = self.target_net(b_s_).detach()  # detach from computational graph, don't back propagate
         # select the maximum q value
-        # print(q_next)
         # q_next.max(1) returns the max value along the axis=1 and its corresponding index
         q_target = b_r + self.GAMMA * q_next.max(1)[0].view(self.BATCH_SIZE, 1)  # (batch_size, 1)
         loss = self.loss_func(q_eval, q_target)
