@@ -27,7 +27,7 @@ if LOAD_MODEL:
     bird.load_model(MODEL_PATH)
     print(f"Loaded model: {MODEL_PATH}")
 
-for i_episode in range(400):
+for i_episode in range(10000):
     s = env.reset()
     img = s[0]
     img = cv2.cvtColor(cv2.resize(img, (80, 80)), cv2.COLOR_BGR2GRAY)

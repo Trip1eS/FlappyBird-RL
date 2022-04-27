@@ -38,14 +38,15 @@ class NetDQN(nn.Module):
 
 
 class DQN(object):
-    def __init__(self):
+    def __init__(self, method = 'DQN'):
 
         self.BATCH_SIZE = 32  # batch size of sampling process from buffer
         self.LR = 0.01  # learning rate
         self.EPSILON = 0.9  # epsilon used for epsilon greedy approach
-        self.GAMMA = 0.9  # discount factor
+        self.GAMMA = 0.95  # discount factor
         self.TARGET_NETWORK_REPLACE_FREQ = 100  # How frequently target network updates
-        self.MEMORY_CAPACITY = 200  # The capacity of experience replay buffer
+        self.MEMORY_CAPACITY = 2000  # The capacity of experience replay buffer
+        self.METHOD = method
 
         self.DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -138,9 +139,15 @@ class DQN(object):
         # calculate the q value of next state
         q_next = self.target_net(b_s_).detach()  # detach from computational graph, don't back propagate
         # select the maximum q value
-        # q_next.max(1) returns the max value along the axis=1 and its corresponding index
-        q_target = b_r + self.GAMMA * q_next.max(1)[0].view(self.BATCH_SIZE, 1)  # (batch_size, 1)
-        loss = self.loss_func(q_eval, q_target)
+
+        if self.METHOD == 'DQN':
+            # q_next.max(1) returns the max value along the axis=1 and its corresponding index
+            q_target = b_r + self.GAMMA * q_next.max(1)[0].view(self.BATCH_SIZE, 1)  # (batch_size, 1)
+            loss = self.loss_func(q_eval, q_target)
+        elif self.METHOD == 'DDQN':
+            action_eval_next = self.eval_net(b_s_).max(1)[1].view(self.BATCH_SIZE, 1)
+            q_target = b_r + self.GAMMA * q_next.gather(1, action_eval_next)
+            loss = self.loss_func(q_eval, q_target)
 
         self.optimizer.zero_grad()  # reset the gradient to zero
         loss.backward()
