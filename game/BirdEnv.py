@@ -101,7 +101,7 @@ class BirdEnv(gym.Env):
             #穿过一个柱子奖励加1
             pipeMidPos = pipe['x'] + self.PIPE_WIDTH / 2
             if pipeMidPos <= playerMidPos < pipeMidPos + 4:
-                print("SCORE!")
+                # print("SCORE!")
                 self.score += 1
                 reward = self.reward(10)
 
