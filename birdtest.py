@@ -9,7 +9,7 @@ from bird_dqn_agent import DQN
 import cv2
 
 SAVE_FREQ = 20
-LOAD_MODEL = True
+LOAD_MODEL = False
 MODEL_PATH = 'model.pth'
 
 

@@ -33,10 +33,7 @@ class NetPolicyGradient(nn.Module):
             nn.Linear(1600, 256),
             nn.ReLU()
         )
-        self.out = nn.Sequential(
-            nn.Linear(256, N_ACTIONS),
-            nn.Softmax(dim=1)
-        )
+        self.out = nn.Linear(256, N_ACTIONS)
 
     def forward(self, x):
         # Define how the input data pass inside the network
@@ -45,14 +42,16 @@ class NetPolicyGradient(nn.Module):
         x = self.conv3(x)
         x = torch.flatten(x, start_dim=1)
         x = self.fc1(x)
-        actions_value = self.out(x)
+        x = self.out(x)
+        print("out: ", x)
+        x = F.softmax(x, dim=1)
 
-        return actions_value
+        return x
 
 
 class PolicyGradient(object):
     def __init__(self):
-        self.LR = 0.01  # learning rate
+        self.LR = 1e-4  # learning rate
         self.GAMMA = 0.95  # discount factor
         self.DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.N_ACTIONS = 2
@@ -66,8 +65,9 @@ class PolicyGradient(object):
     def choose_action(self, obs):
         obs = obs[np.newaxis, :, :, :]
         obs = torch.FloatTensor(obs).to(self.DEVICE)
-        act_prob = self.net.forward(obs).cpu().detach().view(-1).numpy()
+        act_prob = self.net.forward(obs).detach().cpu().view(-1).numpy()
         action = np.random.choice(self.N_ACTIONS, p=act_prob)
+        print("prob: ", act_prob)
         return action
 
     def store_transition(self, state, action, reward):
@@ -91,13 +91,12 @@ class PolicyGradient(object):
         state_pool_tensor = torch.FloatTensor(self.state_pool).to(self.DEVICE)
         action_pool_tensor = torch.LongTensor(self.action_pool).to(self.DEVICE)
 
-        act_prob = self.net.forward(state_pool_tensor) + 0.0001 # avoid prob==0
-        log_prob = torch.sum(
-            -1.0 * torch.log(act_prob) * F.one_hot(action_pool_tensor, act_prob.shape[1]),
-            dim=1)
+        act_prob = self.net.forward(state_pool_tensor)
+        print("prob: ", act_prob)
+        log_prob = F.cross_entropy(act_prob, action_pool_tensor)
         loss = log_prob * discounted_reward
         loss = torch.mean(loss)
-        print('loss: ', loss)
+        print("loss: ", loss)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -111,65 +110,74 @@ class PolicyGradient(object):
 def process_image(image_data):
     x_t1 = cv2.cvtColor(cv2.resize(image_data, (80, 80)), cv2.COLOR_BGR2GRAY)
     ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
-    x_t1 = np.reshape(x_t1, (80, 80, 1))
     return x_t1
 
+def process_state(image_data):
+    image_data = process_image(image_data)
+    image_data = np.reshape(image_data, (80, 80, 1))
+    image_data = np.transpose(image_data, (2, 0, 1))
+    return image_data
+
+
+bird = PolicyGradient()
+env = BirdEnv.BirdEnv()
 
 N_EPISODE = 1000
 STEP = 300
-TEST = 10
+TEST = 5
 
+def run_episode():
+    s = env.reset()
+    img = process_image(s[0])
+    obs = np.stack((img, img, img, img), axis=2)
+    obs = np.transpose(obs, (2, 0, 1))
+    while True:
+        env.render()
+        action = bird.choose_action(obs)
+        s_, reward, over, _ = env.step(action)
+        s_ = process_state(s_)
+        cur_obs = copy.deepcopy(obs)
+        next_obs = copy.deepcopy(s_)
+        next_obs = np.append(next_obs, cur_obs[:3, :, :], axis=0)
+        bird.store_transition(cur_obs, action, reward)
+        obs = next_obs
+        if over:
+            break
 
-def run():
-    bird = PolicyGradient()
-    env = BirdEnv.BirdEnv()
-
-    for i_episode in range(1000):
+def evaluate():
+    eval_reward = []
+    for i in range(TEST):
+        episode_reward = 0
         s = env.reset()
-        img = s[0]
-        img = cv2.cvtColor(cv2.resize(img, (80, 80)), cv2.COLOR_BGR2GRAY)
-        ret, img = cv2.threshold(img, 1, 255, cv2.THRESH_BINARY)
+        img = process_image(s[0])
         obs = np.stack((img, img, img, img), axis=2)
         obs = np.transpose(obs, (2, 0, 1))
-        ep_r = 0
-        for step in range(STEP):
+        while True:
             env.render()
-            a = bird.choose_action(obs)
-            s_, reward, over, _ = env.step(a)
-            s_ = process_image(s_)
-            s_ = np.transpose(s_, (2, 0, 1))
+            action = bird.choose_action(obs)
+            state, reward, over, _ = env.step(action)
+            s_ = process_state(state)
             cur_obs = copy.deepcopy(obs)
             next_obs = copy.deepcopy(s_)
             next_obs = np.append(next_obs, cur_obs[:3, :, :], axis=0)
-            bird.store_transition(cur_obs, a, reward)
             obs = next_obs
+            episode_reward = reward
             if over:
-                bird.learn()
                 break
+        eval_reward.append(episode_reward)
+    return np.mean(eval_reward)
+
+
+
+def run():
+    for i_episode in range(1000):
+        run_episode()
         if i_episode % 5 == 0:
-            total_reward = 0
-            for i in range(TEST):
-                state = env.reset()
-                img = state[0]
-                img = cv2.cvtColor(cv2.resize(img, (80, 80)), cv2.COLOR_BGR2GRAY)
-                ret, img = cv2.threshold(img, 1, 255, cv2.THRESH_BINARY)
-                obs = np.stack((img, img, img, img), axis=2)
-                obs = np.transpose(obs, (2, 0, 1))
-                for j in range(STEP):
-                    env.render()
-                    action = bird.choose_action(obs)
-                    state, reward, over, _ = env.step(action)
-                    s_ = process_image(state)
-                    s_ = np.transpose(s_, (2, 0, 1))
-                    cur_obs = copy.deepcopy(obs)
-                    next_obs = copy.deepcopy(s_)
-                    next_obs = np.append(next_obs, cur_obs[:3, :, :], axis=0)
-                    total_reward += reward
-                    obs = next_obs
-                    if over:
-                        break
-            avg_reward = total_reward / TEST
-            print('Ep:', i_episode, '|', 'Avg_Reward:', round(avg_reward, 2))
+            print("Episode: {}, Reward Sum: {}".format(i_episode, sum(bird.reward_pool)))
+        bird.learn()
+        if (i_episode + 1) % 10 == 0:
+            total_reward = evaluate()
+            print("Test Reward: {}".format(total_reward))
 
 
 if __name__ == "__main__":
