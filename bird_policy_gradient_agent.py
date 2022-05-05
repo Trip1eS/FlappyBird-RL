@@ -112,11 +112,15 @@ def process_image(image_data):
     ret, x_t1 = cv2.threshold(x_t1, 1, 255, cv2.THRESH_BINARY)
     return x_t1
 
-def process_state(image_data):
-    image_data = process_image(image_data)
-    image_data = np.reshape(image_data, (80, 80, 1))
-    image_data = np.transpose(image_data, (2, 0, 1))
-    return image_data
+
+def process_state(obs, state):
+    state = process_image(state)
+    state = np.reshape(state, (80, 80, 1))
+    state = np.transpose(state, (2, 0, 1))
+    cur_obs = copy.deepcopy(obs)
+    next_obs = copy.deepcopy(state)
+    next_obs = np.append(next_obs, cur_obs[:3, :, :], axis=0)
+    return cur_obs, next_obs
 
 
 bird = PolicyGradient()
@@ -126,6 +130,7 @@ N_EPISODE = 1000
 STEP = 300
 TEST = 5
 
+
 def run_episode():
     s = env.reset()
     img = process_image(s[0])
@@ -134,15 +139,13 @@ def run_episode():
     while True:
         env.render()
         action = bird.choose_action(obs)
-        s_, reward, over, _ = env.step(action)
-        s_ = process_state(s_)
-        cur_obs = copy.deepcopy(obs)
-        next_obs = copy.deepcopy(s_)
-        next_obs = np.append(next_obs, cur_obs[:3, :, :], axis=0)
+        state, reward, over, _ = env.step(action)
+        cur_obs, next_obs = process_state(obs, state)
         bird.store_transition(cur_obs, action, reward)
         obs = next_obs
         if over:
             break
+
 
 def evaluate():
     eval_reward = []
@@ -156,17 +159,13 @@ def evaluate():
             env.render()
             action = bird.choose_action(obs)
             state, reward, over, _ = env.step(action)
-            s_ = process_state(state)
-            cur_obs = copy.deepcopy(obs)
-            next_obs = copy.deepcopy(s_)
-            next_obs = np.append(next_obs, cur_obs[:3, :, :], axis=0)
+            cur_obs, next_obs = process_state(obs, state)
             obs = next_obs
             episode_reward = reward
             if over:
                 break
         eval_reward.append(episode_reward)
     return np.mean(eval_reward)
-
 
 
 def run():
