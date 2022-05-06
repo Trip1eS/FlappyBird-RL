@@ -43,7 +43,6 @@ class NetPolicyGradient(nn.Module):
         x = torch.flatten(x, start_dim=1)
         x = self.fc1(x)
         x = self.out(x)
-        print("out: ", x)
         x = F.softmax(x, dim=1)
 
         return x
@@ -67,7 +66,6 @@ class PolicyGradient(object):
         obs = torch.FloatTensor(obs).to(self.DEVICE)
         act_prob = self.net.forward(obs).detach().cpu().view(-1).numpy()
         action = np.random.choice(self.N_ACTIONS, p=act_prob)
-        print("prob: ", act_prob)
         return action
 
     def store_transition(self, state, action, reward):
@@ -92,11 +90,9 @@ class PolicyGradient(object):
         action_pool_tensor = torch.LongTensor(self.action_pool).to(self.DEVICE)
 
         act_prob = self.net.forward(state_pool_tensor)
-        print("prob: ", act_prob)
         log_prob = F.cross_entropy(act_prob, action_pool_tensor)
         loss = log_prob * discounted_reward
         loss = torch.mean(loss)
-        print("loss: ", loss)
 
         self.optimizer.zero_grad()
         loss.backward()
